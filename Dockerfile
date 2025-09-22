@@ -1,4 +1,4 @@
-# Use the official Node.js runtime as the base image
+# Stage 1: Build stage
 FROM node:18-alpine as build
 
 # Set the working directory in the container
@@ -16,17 +16,26 @@ COPY . .
 # Build the application (env vars will be baked into the build)
 RUN npm run build
 
-# Use nginx to serve the built application
-FROM nginx:alpine
+# Stage 2: Production stage
+FROM node:18-alpine as production
 
-# Copy the built application from the previous stage
-COPY --from=build /app/dist /usr/share/nginx/html
+# Set the working directory in the container
+WORKDIR /app
 
-# Copy custom nginx configuration (optional)
-# COPY nginx.conf /etc/nginx/nginx.conf
+# Copy package.json and package-lock.json for production dependencies
+COPY package*.json ./
 
-# Expose port 80
-EXPOSE 80
+# Install only production dependencies and vite for preview
+RUN npm ci --only=production && npm install vite
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Copy the built application from the build stage
+COPY --from=build /app/dist ./dist
+
+# Copy necessary config files for preview server
+COPY --from=build /app/vite.config.js ./
+
+# Expose port 5173 (Vite preview default port)
+EXPOSE 5173
+
+# Start the Vite preview server to serve the built application
+CMD ["npx", "vite", "preview", "--host", "0.0.0.0", "--port", "5173"]
